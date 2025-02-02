@@ -13,7 +13,7 @@ setup(
         "console_scripts": ["gogov=gogov.__init__:main"],
     },
     version="0.0.0",
-    description="High-Level API Client for GoGov CRM",
+    description="Unofficial API Client for GoGov CRM",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Daniel J. Dufour",
