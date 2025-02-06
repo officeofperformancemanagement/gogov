@@ -122,13 +122,13 @@ class Client:
 
         return results
 
-    def export_requests(self, filepath):
+    def export_requests(self, filepath, custom_fields=None):
         # all_topic_info = self.get_all_topic_info()
 
         # get list of all topic ids
         # all_topic_ids = [t['id'] for t in all_topic_info]
 
-        columns = OrderedDict(
+        base_columns = OrderedDict(
             [
                 ("caseId", "caseId"),
                 ("caseType", "caseType"),
@@ -158,6 +158,8 @@ class Client:
             ]
         )
 
+        custom_columns = OrderedDict([])
+
         all_results = []
         for page in range(1):
             results = self.search()
@@ -172,21 +174,29 @@ class Client:
                     ]
                 )
 
-                # add to custom columns
-                for name in source["customFields"].keys():
-                    if "." not in name:
-                        if name not in columns:
-                            columns[name] = ".".join(["customFields", name])
+                # add to custom fields
+                if custom_fields is None:
+                    for name in source["customFields"].keys():
+                        if "." not in name:
+                            if name not in custom_columns:
+                                custom_columns[name] = ".".join(["customFields", name])
 
                 # just want the source part
                 all_results.append(source)
+
+        if custom_fields is not None:
+            custom_columns = OrderedDict(
+                [(fld, ".".join(["customFields", fld])) for fld in custom_fields]
+            )
+
+        columns = OrderedDict(list(base_columns.items()) + list(custom_columns.items()))
 
         print("[gogov] columns:", columns)
         flattened_results = flatmate.flatten(
             all_results, columns=columns, clean=True, skip_empty_columns=False
         )
 
-        with open(filepath, "w", newline="") as f:
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=list(columns.keys()))
             writer.writeheader()
             writer.writerows(flattened_results)
@@ -210,17 +220,26 @@ def main():
         help='base url for the API, like "https://api.govoutreach.com"',
     )
     parser.add_argument("--city-id", type=str, help="city id")
+    parser.add_argument(
+        "--custom-fields",
+        type=str,
+        help="comma-separated list of custom fields to include",
+    )
     parser.add_argument("--email", type=str, help="email")
     parser.add_argument("--password", type=str, help="password")
     parser.add_argument("--site", type=str, help="site")
     args = parser.parse_args()
+
+    if args.method not in ["export-requests", "export_requests"]:
+        raise Except("[gogov] invalid or missing method")
 
     client = Client(
         email=args.email, password=args.password, site=args.site, city_id=args.city_id
     )
 
     if args.method in ["export-requests", "export_requests"]:
-        client.export_requests(args.outpath)
+        custom_fields = args.custom_fields.split(",") if args.custom_fields else None
+        client.export_requests(args.outpath, custom_fields=custom_fields)
 
     client.logout()
 
