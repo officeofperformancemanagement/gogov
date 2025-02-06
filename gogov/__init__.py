@@ -122,7 +122,7 @@ class Client:
 
         return results
 
-    def export_requests(self, filepath, custom_fields=None):
+    def export_requests(self, filepath=None, fh = None, custom_fields=None):
         # all_topic_info = self.get_all_topic_info()
 
         # get list of all topic ids
@@ -196,11 +196,14 @@ class Client:
             all_results, columns=columns, clean=True, skip_empty_columns=False
         )
 
-        with open(filepath, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(columns.keys()))
-            writer.writeheader()
-            writer.writerows(flattened_results)
+        f = fh or open(filepath, "w", newline="", encoding="utf-8")
 
+        writer = csv.DictWriter(f, fieldnames=list(columns.keys()))
+        writer.writeheader()
+        writer.writerows(flattened_results)
+
+        if fh is None:
+            f.close()
 
 def main():
     parser = argparse.ArgumentParser(
