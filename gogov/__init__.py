@@ -10,6 +10,8 @@ import flatmate
 
 class Client:
     def __init__(self, email, password, site, city_id, wait=10):
+        if wait is None:
+            wait = 10
         self.base = "https://api.govoutreach.com"
         self.site = site
         self.city_id = city_id
@@ -122,7 +124,7 @@ class Client:
 
         return results
 
-    def export_requests(self, filepath=None, fh = None, custom_fields=None):
+    def export_requests(self, filepath=None, fh=None, custom_fields=None):
         # all_topic_info = self.get_all_topic_info()
 
         # get list of all topic ids
@@ -231,13 +233,18 @@ def main():
     parser.add_argument("--email", type=str, help="email")
     parser.add_argument("--password", type=str, help="password")
     parser.add_argument("--site", type=str, help="site")
+    parser.add_argument("--wait", type=float, help="wait")
     args = parser.parse_args()
 
     if args.method not in ["export-requests", "export_requests"]:
         raise Except("[gogov] invalid or missing method")
 
     client = Client(
-        email=args.email, password=args.password, site=args.site, city_id=args.city_id
+        email=args.email,
+        password=args.password,
+        site=args.site,
+        city_id=args.city_id,
+        wait=args.wait,
     )
 
     if args.method in ["export-requests", "export_requests"]:
