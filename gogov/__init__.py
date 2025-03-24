@@ -207,6 +207,7 @@ class Client:
         if fh is None:
             f.close()
 
+
 def main():
     parser = argparse.ArgumentParser(
         prog="gogov",
