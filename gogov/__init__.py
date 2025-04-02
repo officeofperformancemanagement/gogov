@@ -4,7 +4,7 @@ from collections import OrderedDict
 import json
 import requests
 from time import sleep, time
-import topicinfo
+from .topicinfo import get_topic_field_info
 
 import flatmate
 
@@ -221,7 +221,7 @@ class Client:
 
     # topic_fields: Lists fields associated with each topic (minus loc., desc., etc.)
     # field_values: Lists acceptable inputs for each drop-down field (often "Yes", "No", or "Unknown")
-    topic_fields, field_values = topicinfo.get_topic_field_info()
+    topic_fields, field_values = get_topic_field_info()
 
     # Function that submits a CRM request to the client's site using the GOGov API
     #   location format is as follows: {"shortAddress": _, "coordinates: {"latitude": _, "longitude": _}}
