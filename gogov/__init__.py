@@ -220,23 +220,30 @@ class Client:
     #   "fields" param contains all other fields: [{"id": "field1", "value": "value1"}, {"id": _, "value": _}, ...]
     # See the GOGov API: https://documenter.getpostman.com/view/11428138/TVzLpgCK#69dfabaf-84b2-416f-92e0-2857e0702982
     def submit_request(
-        self, topic_id, location=None, description=None, contact_id=0, assigned_to_id=0, fields=None
+        self,
+        topic_id,
+        location=None,
+        description=None,
+        contact_id=0,
+        assigned_to_id=0,
+        fields=None,
     ):
-
         # Make a dict of all topic_id: topic_name and use it to validate the user's input for topic_id
         topics = self.get_topics()
-        topic_ids = {topic["id"]: topic["attributes"]["name"] for topic in topics["data"]}
+        topic_ids = {
+            topic["id"]: topic["attributes"]["name"] for topic in topics["data"]
+        }
         if topic_id not in topic_ids:
             raise ValueError(f"Invalid input for topic_id: {topic_id}")
 
         # Raise an error if the user did not put in a location
         if location is None:
             raise ValueError("No value provided for location.")
-        
+
         # Same for description
         if description is None:
             raise ValueError("No value provided for description.")
-        
+
         # Make a single dict with {id}: {value} for each field dict in "fields" for input validation
         input_fields = {field["id"]: field["value"] for field in fields}
 
@@ -249,17 +256,22 @@ class Client:
             if required_field not in input_fields:
                 missing_fields.append(required_field)
         if len(missing_fields) > 0:
-            raise ValueError(f"Missing ({len(missing_fields)}) required fields: {missing_fields}")
+            raise ValueError(
+                f"Missing ({len(missing_fields)}) required fields: {missing_fields}"
+            )
 
         # Validate the user's input for any fields that are answered with drop-down boxes
         for field in input_fields:
-            if field in self.field_values and input_fields[field] not in self.field_values[field]:
+            if (
+                field in self.field_values
+                and input_fields[field] not in self.field_values[field]
+            ):
                 invalid_message = f"""
                     Invalid input value for {field}: {input_fields[field]} ; 
                     list of valid input values for {field}: {self.field_values[field]}
                 """
                 raise ValueError(invalid_message)
-        
+
         # The URL for submitting the request
         url = "https://api.govoutreach.com/crm/requests"
 
@@ -267,10 +279,10 @@ class Client:
         headers = {
             "Authorization": self.access_token,
             "X-Gogovapps-Site": self.site,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
-        # JSON-formatted dict 
+        # JSON-formatted dict
         data = {
             "data": {
                 "attributes": {
@@ -279,7 +291,7 @@ class Client:
                     "contact-id": contact_id,
                     "assigned-to-id": assigned_to_id,
                     "custom-fields": fields,
-                    "location": location
+                    "location": location,
                 }
             }
         }
@@ -287,6 +299,7 @@ class Client:
         self.throttle()
         response = requests.post(url=url, headers=headers, data=json.dumps(data))
         print(f"[gogov] response: {response.text}")
+
 
 def main():
     parser = argparse.ArgumentParser(
