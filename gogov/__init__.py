@@ -131,11 +131,18 @@ class Client:
         # get list of all topic ids
         # all_topic_ids = [t['id'] for t in all_topic_info]
 
+        # Make a "flat" dictionary of the topic IDs and their names to get classificationName
+        topics = self.get_topics()
+        topics_ids = {
+            topic["id"]: topic["attributes"]["name"] for topic in topics["data"]
+        }
+
         base_columns = OrderedDict(
             [
                 ("caseId", "caseId"),
                 ("caseType", "caseType"),
-                ("classificationType", "classificationId"),
+                ("classificationId", "classificationId"),
+                ("classificationName", "N/A"),
                 ("departmentId", "departmentId"),
                 ("contactId", "contactId"),
                 ("contact2Id", "contact2Id"),
@@ -198,6 +205,10 @@ class Client:
         flattened_results = flatmate.flatten(
             all_results, columns=columns, clean=True, skip_empty_columns=False
         )
+
+        # Add the classification name using the classification ID
+        for result in flattened_results:
+            result["classificationName"] = topics_ids[result["classificationId"]]
 
         f = fh or open(filepath, "w", newline="", encoding="utf-8")
 
