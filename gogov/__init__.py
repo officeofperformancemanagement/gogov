@@ -2,6 +2,8 @@ import argparse
 import csv
 from collections import OrderedDict
 import json
+
+import re
 import requests
 from time import sleep, time
 from .topicinfo import get_topic_field_info
@@ -9,8 +11,23 @@ from .topicinfo import get_topic_field_info
 import flatmate
 
 
+def inverse(d):
+    return dict([(v, k) for k, v in d.items()])
+
+
+# f123d=lstr456;...
+def process_assignments(ln):
+    return dict(
+        [
+            tuple(it.split("="))
+            for it in ln.split(";")
+            if "=" in it and it.split("=")[1].startswith("lstr")
+        ]
+    )
+
+
 class Client:
-    def __init__(self, email, password, site, city_id, wait=10):
+    def __init__(self, email, password, site, city_id, wait=10, search_limit=None):
         if wait is None:
             wait = 10
         self.base = "https://api.govoutreach.com"
@@ -19,6 +36,7 @@ class Client:
         self.wait = wait
         self.prevtime = None
         self.login(email, password)
+        self.search_limit = search_limit
 
     def throttle(self):
         current = time()
@@ -68,6 +86,68 @@ class Client:
         r = requests.get(url, headers=headers)
         data = r.json()
         return data
+
+    # returns a mapping of classification_id to custom field name to label
+    # like '57402' => 'pothole4' => 'Vehicle Damage'
+    # every custom field name should be unique, too
+    # but not every label is unique
+    def get_custom_fields(self):
+        topic_ids = [topic["id"] for topic in self.get_topics()["data"]]
+
+        url = "https://user.govoutreach.com/chattanoogacitytn/script.php?t=empreq"
+        r = requests.get(url)
+        text = r.text
+
+        # parse lstr0='Time Abandoned or Inoperable';
+        lstr_to_value = dict(re.findall("(lstr\d+)='([^']*)';", text))
+
+        default_fstr_to_lstr = process_assignments(
+            re.search("([^\n]+);switch", text).group(1)
+        )
+
+        # parses cases
+        cases = dict(
+            re.findall("case (\d+):\n([^\n]+)\nbreak;", text, flags=re.MULTILINE)
+        )
+
+        # convert cases (fstr to lstr)
+        cases = dict([(k, process_assignments(v.strip())) for k, v in cases.items()])
+
+        # map display names
+        field_to_fstr = dict(
+            re.findall(" ([A-Za-z\d_]+)Display\([^;]+(f[a-z\d]+)\);", text)
+        )
+
+        fstr_to_field = inverse(field_to_fstr)
+
+        # build dictionary of { [classification_id]: { [custom field name]: label } }
+        # because the id depends on the classification being used
+        # a classification is like an id
+        results = {}
+
+        for topic_id in topic_ids:
+            results[topic_id] = {}
+
+            if topic_id in cases:
+                # first iterate over case/topic's fstr to lstr
+                for fstr, lstr in cases[topic_id].items():
+                    customFieldName = fstr_to_field[fstr]
+                    results[topic_id][customFieldName] = lstr_to_value[lstr]
+
+            # go through and fill in defaults if not already filled
+            for fstr, lstr in default_fstr_to_lstr.items():
+                customFieldName = fstr_to_field[fstr]
+                if customFieldName not in results[topic_id]:
+                    results[topic_id][customFieldName] = lstr_to_value[lstr]
+
+        # add topic_id=None representing default values
+        results[None] = {}
+        for fstr, lstr in default_fstr_to_lstr.items():
+            customFieldName = fstr_to_field[fstr]
+            if customFieldName not in results[None]:
+                results[None][customFieldName] = lstr_to_value[lstr]
+
+        return results
 
     def get_topics(self):
         url = self.base + "/core/crm/topics"
@@ -123,9 +203,17 @@ class Client:
 
             results += sources
 
+            if self.search_limit is not None and len(results) >= self.search_limit:
+                break
+
+        if self.search_limit is not None:
+            results = results[: self.search_limit]
+
         return results
 
     def export_requests(self, filepath=None, fh=None, custom_fields=None):
+        topic_id_to_field_name_to_label = self.get_custom_fields()
+
         # all_topic_info = self.get_all_topic_info()
 
         # get list of all topic ids
@@ -175,21 +263,41 @@ class Client:
             results = self.search()
 
             for source in results:
-                # overwrite custom fields, converting from list of dictionaries to a simple dictionary
-                source["customFields"] = dict(
-                    [
-                        (fld["name"], fld["value"])
-                        for fld in source["customFields"]
-                        if fld.get("name")
-                    ]
-                )
+                classificationId = source["classificationId"]
 
-                # add to custom fields
-                if custom_fields is None:
-                    for name in source["customFields"].keys():
-                        if "." not in name:
-                            if name not in custom_columns:
-                                custom_columns[name] = ".".join(["customFields", name])
+                if "customFields" in source and len(source["customFields"]) >= 1:
+                    classification_custom_field_names = topic_id_to_field_name_to_label[
+                        str(classificationId)
+                    ]
+
+                    # overwrite custom fields, converting from list of dictionaries to a simple dictionary
+                    source["customFields"] = dict(
+                        [
+                            (
+                                classification_custom_field_names[
+                                    fld["customFieldName"]
+                                ],
+                                (
+                                    fld.get("valueText")
+                                    or fld.get("valueDatetime")
+                                    or ""
+                                ).strip(),
+                            )
+                            for fld in source["customFields"]
+                            if fld.get("customFieldName")
+                        ]
+                    )
+
+                    # add to custom fields
+                    if custom_fields is None:
+                        for name in source["customFields"].keys():
+                            if "." not in name:
+                                if name not in custom_columns:
+                                    custom_columns[name] = ".".join(
+                                        ["customFields", name]
+                                    )
+                else:
+                    source["customFields"] = {}
 
                 # just want the source part
                 all_results.append(source)
@@ -201,10 +309,27 @@ class Client:
 
         columns = OrderedDict(list(base_columns.items()) + list(custom_columns.items()))
 
+        # trim any column names with spaces in them
+        columns = OrderedDict(
+            [
+                (k.strip(), v.strip() if isinstance(v, str) else v)
+                for k, v in columns.items()
+            ]
+        )
+
         print("[gogov] columns:", columns)
         flattened_results = flatmate.flatten(
             all_results, columns=columns, clean=True, skip_empty_columns=False
         )
+
+        for row in flattened_results:
+            for key in row:
+                value = row[key]
+                if isinstance(value, str):
+                    value = value.strip()
+                row[key.strip()] = value
+                if key != key.strip():
+                    del row[key]
 
         # Add the classification name using the classification ID
         for result in flattened_results:
@@ -339,6 +464,11 @@ def main():
     parser.add_argument("--password", type=str, help="password")
     parser.add_argument("--site", type=str, help="site")
     parser.add_argument("--wait", type=float, help="wait")
+    parser.add_argument(
+        "--search-limit",
+        type=int,
+        help="maximum number of requests when searching or exporting",
+    )
     args = parser.parse_args()
 
     if args.method not in ["export-requests", "export_requests"]:
@@ -349,6 +479,7 @@ def main():
         password=args.password,
         site=args.site,
         city_id=args.city_id,
+        search_limit=args.search_limit,
         wait=args.wait,
     )
 
