@@ -99,15 +99,15 @@ class Client:
         text = r.text
 
         # parse lstr0='Time Abandoned or Inoperable';
-        lstr_to_value = dict(re.findall("(lstr\d+)='([^']*)';", text))
+        lstr_to_value = dict(re.findall(r"(lstr\d+)='([^']*)';", text))
 
         default_fstr_to_lstr = process_assignments(
-            re.search("([^\n]+);switch", text).group(1)
+            re.search(r"([^\n]+);switch", text).group(1)
         )
 
         # parses cases
         cases = dict(
-            re.findall("case (\d+):\n([^\n]+)\nbreak;", text, flags=re.MULTILINE)
+            re.findall(r"case (\d+):\n([^\n]+)\nbreak;", text, flags=re.MULTILINE)
         )
 
         # convert cases (fstr to lstr)
@@ -115,7 +115,7 @@ class Client:
 
         # map display names
         field_to_fstr = dict(
-            re.findall(" ([A-Za-z\d_]+)Display\([^;]+(f[a-z\d]+)\);", text)
+            re.findall(r" ([A-Za-z\d_]+)Display\([^;]+(f[a-z\d]+)\);", text)
         )
 
         fstr_to_field = inverse(field_to_fstr)
@@ -363,7 +363,8 @@ class Client:
         contact_id=0,
         assigned_to_id=0,
         fields=None,
-    ):
+    ):        
+
         # Make a dict of all topic_id: topic_name and use it to validate the user's input for topic_id
         topics = self.get_topics()
         topic_ids = {
@@ -383,14 +384,23 @@ class Client:
         # Make a single dict with {id}: {value} for each field dict in "fields" for input validation
         input_fields = {field["id"]: field["value"] for field in fields}
 
+        # A dictionary of {fieldname}: {display value} for checking if the user input the display values in fields
+        custom_fields = self.get_custom_fields()["58525"]
+
         # Get the name assoc. with topic_id and check if the input for "fields" is missing any required ones
         topic_name = topic_ids[topic_id].upper()
         # topic_name.upper()
         required_fields = self.topic_fields[topic_name]
         missing_fields = []
         for required_field in required_fields:
+            required_display_val = custom_fields[required_field]
             if required_field not in input_fields:
-                missing_fields.append(required_field)
+                if required_display_val in input_fields:
+                    for field in fields:
+                        if field["id"] == required_display_val:
+                            field["id"] = required_field
+                else:
+                    missing_fields.append((required_field, required_display_val))
         if len(missing_fields) > 0:
             raise ValueError(
                 f"Missing ({len(missing_fields)}) required fields: {missing_fields}"
@@ -417,6 +427,8 @@ class Client:
             "X-Gogovapps-Site": self.site,
             "Content-Type": "application/json",
         }
+
+        print(fields)
 
         # JSON-formatted dict
         data = {
