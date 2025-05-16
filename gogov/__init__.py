@@ -1,6 +1,7 @@
 import argparse
 import csv
 from collections import OrderedDict
+import geochatt
 import json
 
 import re
@@ -347,18 +348,22 @@ class Client:
     # topic_fields: Lists fields associated with each topic (minus loc., desc., etc.)
     # field_values: Lists acceptable inputs for each drop-down field (often "Yes", "No", or "Unknown")
     topic_fields, field_values = get_topic_field_info()
-
+    
     # Function that submits a CRM request to the client's site using the GOGov API
-    #   location format is as follows: {"shortAddress": _, "coordinates: {"latitude": _, "longitude": _}}
+    #   address, longitude, and latitude make up the "location" parameter for the request:
+    #      - address is required
+    #      - longitude and latitude will be determined automatically from address if not provided
     #   description is required; be sure to include any specific information the service team may need
     #   contact_id defaults to 0; this indicates an anonymous requester
     #   assigned_to_id defaults to 0; this indicates automatic routing to the assignee
-    #   "fields" param contains all other fields: [{"id": "field1", "value": "value1"}, {"id": _, "value": _}, ...]
+    #   "fields" param contains all other fields: {"field1": value1, "field2": value2, ...}
     # See the GOGov API: https://documenter.getpostman.com/view/11428138/TVzLpgCK#69dfabaf-84b2-416f-92e0-2857e0702982
     def submit_request(
         self,
         topic_id,
-        location=None,
+        address,
+        longitude=None,
+        latitude=None,
         description=None,
         contact_id=0,
         assigned_to_id=0,
@@ -373,32 +378,62 @@ class Client:
         if topic_id not in topic_ids:
             raise ValueError(f"Invalid input for topic_id: {topic_id}")
 
-        # Raise an error if the user did not put in a location
-        if location is None:
-            raise ValueError("No value provided for location.")
+        # If the user did not input an address, raise a ValueError
+        if address is None:
+            raise ValueError("No value provided for address.")
 
-        # Same for description
+        # Check if the user input longitude and latitude; if one or both is missing, use geochatt to find them
+        if longitude is None or latitude is None:
+            try:
+                coordinates = geochatt.get_parcel_centroid(address)
+            except Exception:
+                exception_message = f"""
+                    longitude and latitude could not be determined for address: {address} ;
+
+                    check to make sure the address is in Hamilton County, and follows the
+                    format [street number] [street name] [street suffix (e.g., "drive")] ;
+
+                    or manually input values for both longitude and latitude to override automatic
+                    determination.
+                """
+                raise Exception(exception_message)
+            else:
+                longitude = coordinates.x
+                latitude = coordinates.y
+
+        # Set up the location parameter in the GOGov request format
+        location = {
+            "data": {
+                "shortAddress": address,
+                "coordinates": {
+                    "longitude": longitude,
+                    "latitude": latitude
+                }
+            }
+        }
+
+        # Raise a ValueError if there is no description provided
         if description is None:
             raise ValueError("No value provided for description.")
 
-        # Make a single dict with {id}: {value} for each field dict in "fields" for input validation
-        input_fields = {field["id"]: field["value"] for field in fields}
+        # # Make a single dict with {id}: {value} for each field dict in "fields" for input validation
+        # input_fields = {field["id"]: field["value"] for field in fields}
 
         # A dictionary of {fieldname}: {display value} for checking if the user input the display values in fields
-        custom_fields = self.get_custom_fields()["58525"]
+        custom_fields = self.get_custom_fields()[topic_id]
 
         # Get the name assoc. with topic_id and check if the input for "fields" is missing any required ones
         topic_name = topic_ids[topic_id].upper()
         # topic_name.upper()
         required_fields = self.topic_fields[topic_name]
         missing_fields = []
-        for required_field in required_fields:
+        for required_field in required_fields: # Either the fieldname or display value is valid
             required_display_val = custom_fields[required_field]
-            if required_field not in input_fields:
-                if required_display_val in input_fields:
-                    for field in fields:
-                        if field["id"] == required_display_val:
-                            field["id"] = required_field
+            if required_field not in fields:
+                if required_display_val in fields: # Replace display values with fieldnames
+                    for field in list(fields):
+                        if field == required_display_val:
+                            fields[required_field] = fields.pop(required_display_val)
                 else:
                     missing_fields.append((required_field, required_display_val))
         if len(missing_fields) > 0:
@@ -407,13 +442,13 @@ class Client:
             )
 
         # Validate the user's input for any fields that are answered with drop-down boxes
-        for field in input_fields:
+        for field in fields:
             if (
                 field in self.field_values
-                and input_fields[field] not in self.field_values[field]
+                and fields[field] not in self.field_values[field]
             ):
                 invalid_message = f"""
-                    Invalid input value for {field}: {input_fields[field]} ; 
+                    Invalid input value for {field}: {fields[field]} ; 
                     list of valid input values for {field}: {self.field_values[field]}
                 """
                 raise ValueError(invalid_message)
@@ -428,7 +463,11 @@ class Client:
             "Content-Type": "application/json",
         }
 
-        print(fields)
+        # Format the user's input for fields to fit the GOGov specification
+        submit_fields = []
+        for field in fields:
+            submit_field = {"id": field, "value": fields[field]}
+            submit_fields.append(submit_field)
 
         # JSON-formatted dict
         data = {
@@ -438,7 +477,7 @@ class Client:
                     "description": description,
                     "contact-id": contact_id,
                     "assigned-to-id": assigned_to_id,
-                    "custom-fields": fields,
+                    "custom-fields": submit_fields,
                     "location": location,
                 }
             }
