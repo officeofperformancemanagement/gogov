@@ -349,7 +349,7 @@ class Client:
     # topic_fields: Lists fields associated with each topic (minus loc., desc., etc.)
     # field_values: Lists acceptable inputs for each drop-down field (often "Yes", "No", or "Unknown")
     topic_fields, field_values = get_topic_field_info()
-    
+
     # Function that submits a CRM request to the client's site using the GOGov API
     #   address, longitude, and latitude make up the "location" parameter for the request:
     #      - address is required
@@ -369,8 +369,7 @@ class Client:
         contact_id=0,
         assigned_to_id=0,
         fields=None,
-    ):        
-
+    ):
         # Make a dict of all topic_id: topic_name and use it to validate the user's input for topic_id
         topics = self.get_topics()
         topic_ids = {
@@ -406,10 +405,7 @@ class Client:
         location = {
             "data": {
                 "shortAddress": address,
-                "coordinates": {
-                    "longitude": longitude,
-                    "latitude": latitude
-                }
+                "coordinates": {"longitude": longitude, "latitude": latitude},
             }
         }
 
@@ -428,10 +424,14 @@ class Client:
         # topic_name.upper()
         required_fields = self.topic_fields[topic_name]
         missing_fields = []
-        for required_field in required_fields: # Either the fieldname or display value is valid
+        for (
+            required_field
+        ) in required_fields:  # Either the fieldname or display value is valid
             required_display_val = custom_fields[required_field]
             if required_field not in fields:
-                if required_display_val in fields: # Replace display values with fieldnames
+                if (
+                    required_display_val in fields
+                ):  # Replace display values with fieldnames
                     for field in list(fields):
                         if field == required_display_val:
                             fields[required_field] = fields.pop(required_display_val)
