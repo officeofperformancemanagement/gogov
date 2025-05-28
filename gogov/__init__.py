@@ -229,6 +229,7 @@ class Client:
         base_columns = OrderedDict(
             [
                 ("caseId", "caseId"),
+                ("displayId", "displayId"),
                 ("caseType", "caseType"),
                 ("classificationId", "classificationId"),
                 ("classificationName", "N/A"),
