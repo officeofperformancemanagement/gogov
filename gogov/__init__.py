@@ -6,6 +6,7 @@ import json
 
 import re
 import requests
+
 from time import sleep, time
 from .topicinfo import get_topic_field_info
 
@@ -28,9 +29,9 @@ def process_assignments(ln):
 
 
 class Client:
-    def __init__(self, email, password, site, city_id, wait=10, search_limit=None):
+    def __init__(self, email, password, site, city_id, wait=15, search_limit=None):
         if wait is None:
-            wait = 10
+            wait = 15
         self.base = "https://api.govoutreach.com"
         self.site = site
         self.city_id = city_id
@@ -95,6 +96,7 @@ class Client:
     def get_custom_fields(self):
         topic_ids = [topic["id"] for topic in self.get_topics()["data"]]
 
+        self.throttle()
         url = "https://user.govoutreach.com/chattanoogacitytn/script.php?t=empreq"
         r = requests.get(url)
         text = r.text
@@ -225,6 +227,7 @@ class Client:
         topics_ids = {
             topic["id"]: topic["attributes"]["name"] for topic in topics["data"]
         }
+        self.throttle()
 
         base_columns = OrderedDict(
             [
@@ -263,6 +266,7 @@ class Client:
         all_results = []
         for page in range(1):
             results = self.search()
+            self.throttle()
 
             for source in results:
                 classificationId = source["classificationId"]
