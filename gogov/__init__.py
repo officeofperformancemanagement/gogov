@@ -214,7 +214,9 @@ class Client:
 
         return results
 
-    def export_requests(self, filepath=None, fh=None, custom_fields=None, redirect_topics={}):
+    def export_requests(
+        self, filepath=None, fh=None, custom_fields=None, redirect_topics={}
+    ):
         topic_id_to_field_name_to_label = self.get_custom_fields()
 
         # all_topic_info = self.get_all_topic_info()
@@ -338,9 +340,12 @@ class Client:
         flattened_results = all_results
         for results_path in flattened_results:
             flattened_results[results_path] = flatmate.flatten(
-                flattened_results[results_path], columns=columns, clean=True, skip_empty_columns=False
+                flattened_results[results_path],
+                columns=columns,
+                clean=True,
+                skip_empty_columns=False,
             )
-        
+
         for results_path in flattened_results:
             for row in flattened_results[results_path]:
                 # Add the classificationName field to the row
@@ -367,7 +372,7 @@ class Client:
                     out_file.close()
 
             # Write redirected data to the appropriate filepaths
-            else:                
+            else:
                 out_file = open(results_path, "w", newline="", encoding="utf-8")
 
                 writer = csv.DictWriter(out_file, fieldnames=list(columns.keys()))
