@@ -214,7 +214,7 @@ class Client:
 
         return results
 
-    def export_requests(self, filepath=None, fh=None, custom_fields=None):
+    def export_requests(self, filepath=None, fh=None, custom_fields=None, redirect_topics={}):
         topic_id_to_field_name_to_label = self.get_custom_fields()
 
         # all_topic_info = self.get_all_topic_info()
@@ -263,7 +263,7 @@ class Client:
 
         custom_columns = OrderedDict([])
 
-        all_results = []
+        all_results = {"standard": []}
         for page in range(1):
             results = self.search()
             self.throttle()
@@ -305,8 +305,17 @@ class Client:
                 else:
                     source["customFields"] = {}
 
-                # just want the source part
-                all_results.append(source)
+                # For each redirect filepath, if the classificationId is in its list of classificationIds,
+                # append the source part to a list value associated with its key in all_results;
+                # otherwise, if the classificationId is not found in any of the redirects, source will be
+                # appended to the standard list of requests in all_results
+                redirected = False
+                for path in redirect_topics:
+                    if classificationId in redirect_topics[path]:
+                        all_results.setdefault(path, []).append(source)
+                        redirected = True
+                if redirected is False:
+                    all_results["standard"].append(source)
 
         if custom_fields is not None:
             custom_columns = OrderedDict(
@@ -324,31 +333,48 @@ class Client:
         )
 
         print("[gogov] columns:", columns)
-        flattened_results = flatmate.flatten(
-            all_results, columns=columns, clean=True, skip_empty_columns=False
-        )
 
-        for row in flattened_results:
-            for key in row:
-                value = row[key]
-                if isinstance(value, str):
-                    value = value.strip()
-                row[key.strip()] = value
-                if key != key.strip():
-                    del row[key]
+        # Flatten each data list in all_results using flatmate
+        flattened_results = all_results
+        for results_path in flattened_results:
+            flattened_results[results_path] = flatmate.flatten(
+                flattened_results[results_path], columns=columns, clean=True, skip_empty_columns=False
+            )
+        
+        for results_path in flattened_results:
+            for row in flattened_results[results_path]:
+                # Add the classificationName field to the row
+                row["classificationName"] = topics_ids[row["classificationId"]]
 
-        # Add the classification name using the classification ID
-        for result in flattened_results:
-            result["classificationName"] = topics_ids[result["classificationId"]]
+                for key in row:
+                    value = row[key]
+                    if isinstance(value, str):
+                        value = value.strip()
+                    row[key.strip()] = value
+                    if key != key.strip():
+                        del row[key]
 
-        f = fh or open(filepath, "w", newline="", encoding="utf-8")
+            # Write standard data to input fh/filepath
+            if results_path == "standard":
+                out_file = fh or open(filepath, "w", newline="", encoding="utf-8")
 
-        writer = csv.DictWriter(f, fieldnames=list(columns.keys()))
-        writer.writeheader()
-        writer.writerows(flattened_results)
+                writer = csv.DictWriter(out_file, fieldnames=list(columns.keys()))
+                writer.writeheader()
+                writer.writerows(flattened_results[results_path])
 
-        if fh is None:
-            f.close()
+                # If the caller sent a file handle, leave it open - otherwise, close the file
+                if fh is None:
+                    out_file.close()
+
+            # Write redirected data to the appropriate filepaths
+            else:                
+                out_file = open(results_path, "w", newline="", encoding="utf-8")
+
+                writer = csv.DictWriter(out_file, fieldnames=list(columns.keys()))
+                writer.writeheader()
+                writer.writerows(flattened_results[results_path])
+
+                out_file.close()
 
     # topic_fields: Lists fields associated with each topic (minus loc., desc., etc.)
     # field_values: Lists acceptable inputs for each drop-down field (often "Yes", "No", or "Unknown")
