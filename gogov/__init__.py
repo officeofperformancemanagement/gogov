@@ -172,18 +172,15 @@ class Client:
 
         results = []
 
-        break_outer_loop = False    
+        break_outer_loop = False
 
         for i in range(1_000_000):
-            
             if break_outer_loop is True:
                 break
 
             # Allow 3 tries for each page of data, in case one request fails due to rate limiting/other issues
             for retry in range(1, 4):
-                
                 try:
-
                     payload = {
                         "cityId": self.city_id,
                         "searchAfter": searchAfter,
@@ -205,7 +202,9 @@ class Client:
                     # Avoid the UnicodeEncodeError with the Narrow No-Break Space (\u202f)
                     clean_response_text = response_text.replace("\u202f", " ")
                     print(
-                        "[gogov] response:", clean_response_text[:500], ("..." if len(r.text) > 1000 else "")
+                        "[gogov] response:",
+                        clean_response_text[:500],
+                        ("..." if len(r.text) > 1000 else ""),
                     )
                     data = r.json()
 
@@ -221,28 +220,29 @@ class Client:
 
                     results += sources
 
-                    if self.search_limit is not None and len(results) >= self.search_limit:
+                    if (
+                        self.search_limit is not None
+                        and len(results) >= self.search_limit
+                    ):
                         break_outer_loop = True
                         break
 
                 except Exception as e:
-
                     print("[gogov] exception:", e)
 
                     if (3 - retry) > 1:
-
                         print("[gogov] retrying...")
                         self.throttle()
 
                     else:
-
-                        raise Exception(f"Page {i + 1} of requests could not be gathered after 3 attempts.")
+                        raise Exception(
+                            f"Page {i + 1} of requests could not be gathered after 3 attempts."
+                        )
 
                 # If the "try" block executed successfully, break the retry loop
                 else:
-
                     break
-                    
+
         if self.search_limit is not None:
             results = results[: self.search_limit]
 
