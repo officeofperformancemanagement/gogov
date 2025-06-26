@@ -201,8 +201,11 @@ class Client:
                     self.prevtime = (
                         time()
                     )  # throttle based on time the request completed (not started)
+                    response_text = r.text
+                    # Avoid the UnicodeEncodeError with the Narrow No-Break Space (\u202f)
+                    clean_response_text = response_text.replace("\u202f", " ")
                     print(
-                        "[gogov] response:", r.text[:500], ("..." if len(r.text) > 1000 else "")
+                        "[gogov] response:", clean_response_text[:500], ("..." if len(r.text) > 1000 else "")
                     )
                     data = r.json()
 
