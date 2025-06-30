@@ -202,7 +202,9 @@ class Client:
                     # Avoid the UnicodeEncodeError with the Narrow No-Break Space (\u202f)
                     clean_response_text = response_text.replace("\u202f", " ")
                     # Replace all other characters not in charmap with a ?
-                    clean_response_text = clean_response_text.encode("utf-8", errors="replace").decode("utf-8")
+                    clean_response_text = clean_response_text.encode(
+                        "utf-8", errors="replace"
+                    ).decode("utf-8")
                     print(
                         "[gogov] response:",
                         clean_response_text[:500],
