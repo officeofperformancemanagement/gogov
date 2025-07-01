@@ -12,7 +12,7 @@ setup(
     entry_points={
         "console_scripts": ["gogov=gogov.__init__:main"],
     },
-    version="0.8.2",
+    version="0.8.3",
     description="Unofficial API Client for GoGov CRM",
     long_description=long_description,
     long_description_content_type="text/markdown",
