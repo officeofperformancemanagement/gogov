@@ -447,7 +447,14 @@ class Client:
             topic["id"]: topic["attributes"]["name"] for topic in topics["data"]
         }
         if topic_id not in topic_ids:
-            raise ValueError(f"Invalid input for topic_id: {topic_id}")
+            # Check if the user input the topic display name instead of the id, replacing the name with the id
+            valid = False
+            for id in topic_ids:
+                if topic_id == topic_ids[id]:
+                    topic_id = id
+                    valid = True
+            if not valid:
+                raise ValueError(f"Invalid input for topic_id: {topic_id}")
 
         # If the user did not input an address, raise a ValueError
         if address is None:
