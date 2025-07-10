@@ -203,8 +203,8 @@ class Client:
                     clean_response_text = response_text.replace("\u202f", " ")
                     # Replace all other characters not in charmap with a ?
                     clean_response_text = clean_response_text.encode(
-                        "utf-8", errors="replace"
-                    ).decode("utf-8")
+                        "charmap", errors="ignore"
+                    ).decode("charmap")
                     print(
                         "[gogov] response:",
                         clean_response_text[:500],
